@@ -23,8 +23,8 @@ dl() { # repo  path-no-repo  pasta-destino  nome-de-saida
   rm -rf "$tmp"
 }
 
-# diffusion (720p) + InfiniteTalk
-dl Kijai/WanVideo_comfy "split_files/diffusion_models/Wan2_1-I2V-14B-720p_fp8_e4m3fn_scaled_KJ.safetensors" diffusion_models "Wan2_1-I2V-14B-720p_fp8_e4m3fn_scaled_KJ.safetensors"
+# diffusion (720p — nome REAL do repo Kijai: 720P maiúsculo, sem _scaled_KJ) + InfiniteTalk
+dl Kijai/WanVideo_comfy "Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors" diffusion_models "Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors"
 dl Kijai/WanVideo_comfy "InfiniteTalk/Wan2_1-InfiniTetalk-Single_fp16.safetensors" diffusion_models "Wan2_1-InfiniTetalk-Single_fp16.safetensors"
 # text encoder
 dl Kijai/WanVideo_comfy "umt5-xxl-enc-bf16.safetensors" text_encoders "umt5-xxl-enc-bf16.safetensors"
