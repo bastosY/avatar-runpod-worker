@@ -1,3 +1,9 @@
+# ╔════════════════════════════════════════════════════════════════════════╗
+# ║ VARIANTE RTX 5090 / BLACKWELL (branch rtx5090)                          ║
+# ║ Igual à main (H100) PORÉM com torch cu128 (kernels sm_120). A base      ║
+# ║ 5.2.0 traz torch sem Blackwell → "no kernel image available". Aponte o  ║
+# ║ endpoint da 5090 p/ esta branch e setal Min CUDA = 12.8.                ║
+# ╚════════════════════════════════════════════════════════════════════════╝
 # Worker serverless ComfyUI + WAN/InfiniteTalk (720p) — modelos ASSADOS na imagem.
 # Sem Network Volume: a imagem é autossuficiente, então o endpoint roda em QUALQUER
 # região com GPU (sem travar numa zona). RunPod builda esta imagem direto do GitHub.
@@ -26,6 +32,14 @@ RUN cd /comfyui/custom_nodes && \
     python -m pip install --no-cache-dir -r ComfyUI-WanVideoWrapper/requirements.txt && \
     python -m pip install --no-cache-dir -r ComfyUI-KJNodes/requirements.txt && \
     python -m pip install --no-cache-dir -r ComfyUI-VideoHelperSuite/requirements.txt
+
+# ── PyTorch p/ Blackwell (RTX 5090, sm_120) ─────────────────────────────────
+# A base 5.2.0 traz torch sem kernels Blackwell → o text encoder crasha com
+# "CUDA error: no kernel image is available for execution on the device".
+# Reinstala torch/vision/audio do índice cu128 (suporta sm_120). Vem DEPOIS dos
+# custom nodes p/ não ser sobrescrito pelos requirements.txt deles.
+RUN python -m pip install --no-cache-dir --force-reinstall \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 
 RUN python -m pip install --no-cache-dir "huggingface_hub[cli]" librosa soundfile
 
