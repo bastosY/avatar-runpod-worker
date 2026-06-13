@@ -6,14 +6,13 @@
 FROM runpod/worker-comfyui:5.2.0-base
 
 # ── custom nodes ────────────────────────────────────────────────────────────
-# WanVideoWrapper (nós WanVideoModelLoader/MultiTalkModelLoader/etc.) + VideoHelperSuite
-RUN comfy-node-install comfyui-wanvideowrapper comfyui-videohelpersuite || ( \
-      cd /comfyui/custom_nodes && \
-      git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git && \
-      git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git && \
-      pip install -r ComfyUI-WanVideoWrapper/requirements.txt && \
-      pip install -r ComfyUI-VideoHelperSuite/requirements.txt \
-    )
+# WanVideoWrapper (nós WanVideoModelLoader/MultiTalkModelLoader/etc.) + VideoHelperSuite.
+# git clone direto: instalação garantida (e o build FALHA se o path mudar).
+RUN cd /comfyui/custom_nodes && \
+    git clone --depth 1 https://github.com/kijai/ComfyUI-WanVideoWrapper.git && \
+    git clone --depth 1 https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git && \
+    pip install --no-cache-dir -r ComfyUI-WanVideoWrapper/requirements.txt && \
+    pip install --no-cache-dir -r ComfyUI-VideoHelperSuite/requirements.txt
 
 # dependências extras que o InfiniteTalk usa (wav2vec/áudio)
 RUN pip install --no-cache-dir "huggingface_hub[cli]" librosa soundfile
