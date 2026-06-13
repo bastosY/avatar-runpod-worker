@@ -27,18 +27,22 @@ RUN cd /comfyui/custom_nodes && \
     python -m pip install --no-cache-dir -r ComfyUI-KJNodes/requirements.txt && \
     python -m pip install --no-cache-dir -r ComfyUI-VideoHelperSuite/requirements.txt
 
-RUN python -m pip install --no-cache-dir "huggingface_hub[cli]" librosa soundfile boto3
-
-# ── handler patchado: processa saída de VÍDEO (VHS "gifs") ──────────────────
-# O handler do worker-comfyui 5.2.0 SÓ trata a key "images" e ignora "gifs"
-# (vídeo do VHS_VideoCombine) → retornava success_no_images. Este patch sobe
-# o mp4 pro R2/S3 (boto3 explícito, bucket vindo do BUCKET_ENDPOINT_URL).
-COPY handler.py /handler.py
+RUN python -m pip install --no-cache-dir "huggingface_hub[cli]" librosa soundfile
 
 # ── modelos ASSADOS na imagem (no build) ────────────────────────────────────
 # ~40GB baixados aqui → imagem autossuficiente, sem volume, sem download em runtime.
+# IMPORTANTE: esta camada (a cara) fica ANTES das camadas que mudam toda hora
+# (boto3 + handler), pra o cache dos 40GB ser reaproveitado em rebuilds.
 COPY download_models.sh /download_models.sh
 RUN chmod +x /download_models.sh && MODELS_DIR=/comfyui/models /download_models.sh
+
+# ── camadas baratas no FINAL (mudam com frequência → rebuild em segundos) ────
+RUN python -m pip install --no-cache-dir boto3
+
+# handler patchado: o handler do worker-comfyui 5.2.0 SÓ trata a key "images" e
+# ignora "gifs" (vídeo do VHS_VideoCombine) → retornava success_no_images. Este
+# patch sobe o mp4 pro R2/S3 (boto3 explícito, bucket vindo do BUCKET_ENDPOINT_URL).
+COPY handler.py /handler.py
 
 # Sem CMD override: o entrypoint padrão do worker-comfyui inicia ComfyUI + handler.
 # ComfyUI acha os modelos nativamente em /comfyui/models (sem extra_model_paths).
