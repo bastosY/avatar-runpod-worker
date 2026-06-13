@@ -4,6 +4,13 @@
 
 FROM runpod/worker-comfyui:5.2.0-base
 
+# ── compilador C p/ o triton ────────────────────────────────────────────────
+# GPUs novas (Blackwell/5090) precisam que o triton JIT-compile os kernels fp8;
+# sem gcc o ComfyUI crasha ("Failed to find C compiler"). Sageattention p/ acelerar.
+ENV CC=gcc
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
 # ── atualiza o ComfyUI core ─────────────────────────────────────────────────
 # A base 5.2.0 traz um ComfyUI antigo demais p/ o WanVideoWrapper atual
 # (faltava comfy.ldm.flux.math.apply_rope1). Atualiza para o master recente.
@@ -20,7 +27,13 @@ RUN cd /comfyui/custom_nodes && \
     python -m pip install --no-cache-dir -r ComfyUI-KJNodes/requirements.txt && \
     python -m pip install --no-cache-dir -r ComfyUI-VideoHelperSuite/requirements.txt
 
-RUN python -m pip install --no-cache-dir "huggingface_hub[cli]" librosa soundfile
+RUN python -m pip install --no-cache-dir "huggingface_hub[cli]" librosa soundfile boto3
+
+# ── handler patchado: processa saída de VÍDEO (VHS "gifs") ──────────────────
+# O handler do worker-comfyui 5.2.0 SÓ trata a key "images" e ignora "gifs"
+# (vídeo do VHS_VideoCombine) → retornava success_no_images. Este patch sobe
+# o mp4 pro R2/S3 (boto3 explícito, bucket vindo do BUCKET_ENDPOINT_URL).
+COPY handler.py /handler.py
 
 # ── modelos ASSADOS na imagem (no build) ────────────────────────────────────
 # ~40GB baixados aqui → imagem autossuficiente, sem volume, sem download em runtime.
