@@ -17,8 +17,10 @@ RUN git config --global --add safe.directory /comfyui && \
 # Usa o MESMO python do ComfyUI (python -m pip) para as deps caírem no env certo.
 RUN cd /comfyui/custom_nodes && \
     git clone --depth 1 https://github.com/kijai/ComfyUI-WanVideoWrapper.git && \
+    git clone --depth 1 https://github.com/kijai/ComfyUI-KJNodes.git && \
     git clone --depth 1 https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git && \
     python -m pip install --no-cache-dir -r ComfyUI-WanVideoWrapper/requirements.txt && \
+    python -m pip install --no-cache-dir -r ComfyUI-KJNodes/requirements.txt && \
     python -m pip install --no-cache-dir -r ComfyUI-VideoHelperSuite/requirements.txt
 
 # ── diagnóstico (aparece no BUILD LOG) ──────────────────────────────────────
