@@ -11,8 +11,9 @@ dl() { # repo  path-no-repo  pasta-destino  nome-de-saida
   local final="$VOL/$dest/$out"
   if [ -f "$final" ]; then echo "✓ já existe: $out"; return; fi
   echo "↓ $out  ($repo :: $path)"
-  local tmp; tmp=$(mktemp -d)
-  hf download "$repo" "$path" --local-dir "$tmp" >/dev/null
+  # temp NO VOLUME — o disco do container é pequeno (5GB) e os modelos têm 11-16GB
+  local tmp; tmp=$(mktemp -d -p "$VOL")
+  hf download "$repo" "$path" --local-dir "$tmp"
   mv "$tmp/$path" "$final"
   rm -rf "$tmp"
 }
@@ -29,4 +30,6 @@ dl Kijai/WanVideo_comfy "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_
 # clip vision (de outro repo)
 dl Comfy-Org/Wan_2.1_ComfyUI_repackaged "split_files/clip_vision/clip_vision_h.safetensors" clip_vision "clip_vision_h.safetensors"
 
+echo "=== conteúdo do volume (observabilidade) ==="
+find "$VOL" -type f -exec du -h {} \; 2>/dev/null
 echo "✓ modelos prontos em $VOL"
