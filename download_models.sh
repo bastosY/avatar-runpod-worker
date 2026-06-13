@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Baixa os modelos do InfiniteTalk para o Network Volume (/runpod-volume/models).
 # Idempotente. Salva com os NOMES que o workflow espera (renomeia na hora).
-set -euo pipefail
+# SEM set -e: uma falha num download não pode abortar os outros.
+set -uo pipefail
 
 VOL=/runpod-volume/models
 mkdir -p "$VOL"/{diffusion_models,text_encoders,vae,clip_vision,loras}
+echo "=== hf CLI: $(command -v hf || echo 'NAO ENCONTRADO') ==="
 
 dl() { # repo  path-no-repo  pasta-destino  nome-de-saida
   local repo="$1" path="$2" dest="$3" out="$4"
@@ -13,8 +15,11 @@ dl() { # repo  path-no-repo  pasta-destino  nome-de-saida
   echo "↓ $out  ($repo :: $path)"
   # temp NO VOLUME — o disco do container é pequeno (5GB) e os modelos têm 11-16GB
   local tmp; tmp=$(mktemp -d -p "$VOL")
-  hf download "$repo" "$path" --local-dir "$tmp"
-  mv "$tmp/$path" "$final"
+  if hf download "$repo" "$path" --local-dir "$tmp" && [ -f "$tmp/$path" ]; then
+    mv "$tmp/$path" "$final" && echo "  ✓ OK: $out"
+  else
+    echo "  ✗ FALHOU: $out"
+  fi
   rm -rf "$tmp"
 }
 
