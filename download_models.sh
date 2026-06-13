@@ -17,12 +17,14 @@ dl() { # repo  arquivo-no-repo  pasta-destino
 }
 
 # Kijai/WanVideo_comfy hospeda a maioria. Ajustar os paths se algum mudar.
-dl Kijai/WanVideo_comfy "split_files/diffusion_models/Wan2_1-I2V-14B-480p_fp8_e4m3fn_scaled_KJ.safetensors" diffusion_models || \
-  dl Kijai/WanVideo_comfy "Wan2_1-I2V-14B-480p_fp8_e4m3fn_scaled_KJ.safetensors" diffusion_models
+# Modelo de difusão: 720p nativo (Wan I2V 14B 720p fp8).
+dl Kijai/WanVideo_comfy "split_files/diffusion_models/Wan2_1-I2V-14B-720p_fp8_e4m3fn_scaled_KJ.safetensors" diffusion_models || \
+  dl Kijai/WanVideo_comfy "Wan2_1-I2V-14B-720p_fp8_e4m3fn_scaled_KJ.safetensors" diffusion_models
 
 dl Kijai/WanVideo_comfy "Wan2_1-InfiniTetalk-Single_fp16.safetensors" diffusion_models
 dl Kijai/WanVideo_comfy "umt5-xxl-enc-bf16.safetensors" text_encoders
 dl Kijai/WanVideo_comfy "Wan2_1_VAE_bf16.safetensors" vae || dl Kijai/WanVideo_comfy "wan_2.1_vae.safetensors" vae
+# LoRA distill: só existe a 480p — funciona no modelo 720p (distila steps, não resolução).
 dl Kijai/WanVideo_comfy "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors" loras
 
 # clip_vision_h (do repo do comfyanonymous)

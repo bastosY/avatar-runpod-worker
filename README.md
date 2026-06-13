@@ -1,7 +1,10 @@
-# RunPod Serverless worker — ComfyUI + WAN/InfiniteTalk
+# RunPod Serverless worker — ComfyUI + WAN/InfiniteTalk (720p)
 
-Worker custom pra rodar o workflow InfiniteTalk no **RunPod Serverless** (sem pod).
-RunPod builda a imagem direto deste repo no GitHub.
+Worker custom pra rodar o workflow InfiniteTalk em **720p** no **RunPod Serverless**
+(sem pod). RunPod builda a imagem direto deste repo no GitHub.
+
+Modelo: `Wan2_1-I2V-14B-720p_fp8` + LoRA distill 480p (a 720p não existe; a 480p
+funciona no modelo 720p pois distila os steps, não a resolução).
 
 ## Arquivos
 - `Dockerfile` — worker-comfyui + WanVideoWrapper + VideoHelperSuite.
