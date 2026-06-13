@@ -7,12 +7,21 @@ FROM runpod/worker-comfyui:5.2.0-base
 
 # ── custom nodes ────────────────────────────────────────────────────────────
 # WanVideoWrapper (nós WanVideoModelLoader/MultiTalkModelLoader/etc.) + VideoHelperSuite.
-# git clone direto: instalação garantida (e o build FALHA se o path mudar).
+# Usa o MESMO python do ComfyUI (python -m pip) para as deps caírem no env certo.
 RUN cd /comfyui/custom_nodes && \
     git clone --depth 1 https://github.com/kijai/ComfyUI-WanVideoWrapper.git && \
     git clone --depth 1 https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git && \
-    pip install --no-cache-dir -r ComfyUI-WanVideoWrapper/requirements.txt && \
-    pip install --no-cache-dir -r ComfyUI-VideoHelperSuite/requirements.txt
+    python -m pip install --no-cache-dir -r ComfyUI-WanVideoWrapper/requirements.txt && \
+    python -m pip install --no-cache-dir -r ComfyUI-VideoHelperSuite/requirements.txt
+
+# ── diagnóstico (aparece no BUILD LOG) ──────────────────────────────────────
+# mostra o ambiente e carrega todos os nodes; se o WanVideoWrapper falhar ao
+# importar, o traceback/erro fica visível aqui no log do build.
+RUN echo "=== PYTHON ===" && which python && python --version && \
+    echo "=== custom_nodes ===" && ls /comfyui/custom_nodes && \
+    echo "=== NODE LOAD TEST ===" && cd /comfyui && \
+    (timeout 300 python main.py --quick-test-for-ci --cpu 2>&1 | \
+       grep -iE "wanvideo|videohelper|import times|fail|error|traceback|no module" | head -50 || true)
 
 # dependências extras que o InfiniteTalk usa (wav2vec/áudio)
 RUN pip install --no-cache-dir "huggingface_hub[cli]" librosa soundfile
