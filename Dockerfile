@@ -1,7 +1,6 @@
-# Worker serverless ComfyUI + WAN/InfiniteTalk para RunPod.
-# RunPod builda esta imagem direto do GitHub (Serverless → New Endpoint → GitHub).
-# Os modelos NÃO ficam na imagem — são baixados no 1º start para o Network Volume
-# montado em /runpod-volume (ver start.sh + download_models.sh).
+# Worker serverless ComfyUI + WAN/InfiniteTalk (720p) — modelos ASSADOS na imagem.
+# Sem Network Volume: a imagem é autossuficiente, então o endpoint roda em QUALQUER
+# região com GPU (sem travar numa zona). RunPod builda esta imagem direto do GitHub.
 
 FROM runpod/worker-comfyui:5.2.0-base
 
@@ -13,8 +12,6 @@ RUN git config --global --add safe.directory /comfyui && \
     python -m pip install --no-cache-dir -r requirements.txt
 
 # ── custom nodes ────────────────────────────────────────────────────────────
-# WanVideoWrapper (nós WanVideoModelLoader/MultiTalkModelLoader/etc.) + VideoHelperSuite.
-# Usa o MESMO python do ComfyUI (python -m pip) para as deps caírem no env certo.
 RUN cd /comfyui/custom_nodes && \
     git clone --depth 1 https://github.com/kijai/ComfyUI-WanVideoWrapper.git && \
     git clone --depth 1 https://github.com/kijai/ComfyUI-KJNodes.git && \
@@ -23,23 +20,12 @@ RUN cd /comfyui/custom_nodes && \
     python -m pip install --no-cache-dir -r ComfyUI-KJNodes/requirements.txt && \
     python -m pip install --no-cache-dir -r ComfyUI-VideoHelperSuite/requirements.txt
 
-# ── diagnóstico (aparece no BUILD LOG) ──────────────────────────────────────
-# mostra o ambiente e carrega todos os nodes; se o WanVideoWrapper falhar ao
-# importar, o traceback/erro fica visível aqui no log do build.
-RUN echo "=== PYTHON ===" && which python && python --version && \
-    echo "=== custom_nodes ===" && ls /comfyui/custom_nodes && \
-    echo "=== NODE LOAD TEST ===" && cd /comfyui && \
-    (timeout 300 python main.py --quick-test-for-ci --cpu 2>&1 | \
-       grep -iE "wanvideo|videohelper|import times|fail|error|traceback|no module" | head -50 || true)
+RUN python -m pip install --no-cache-dir "huggingface_hub[cli]" librosa soundfile
 
-# dependências extras que o InfiniteTalk usa (wav2vec/áudio)
-RUN pip install --no-cache-dir "huggingface_hub[cli]" librosa soundfile
-
-# aponta o ComfyUI para os modelos no Network Volume
-COPY extra_model_paths.yaml /comfyui/extra_model_paths.yaml
+# ── modelos ASSADOS na imagem (no build) ────────────────────────────────────
+# ~40GB baixados aqui → imagem autossuficiente, sem volume, sem download em runtime.
 COPY download_models.sh /download_models.sh
-COPY start.sh /start_worker.sh
-RUN chmod +x /download_models.sh /start_worker.sh
+RUN chmod +x /download_models.sh && MODELS_DIR=/comfyui/models /download_models.sh
 
-# nosso start: baixa modelos (idempotente) e then chama o entrypoint original do worker
-CMD ["/start_worker.sh"]
+# Sem CMD override: o entrypoint padrão do worker-comfyui inicia ComfyUI + handler.
+# ComfyUI acha os modelos nativamente em /comfyui/models (sem extra_model_paths).
