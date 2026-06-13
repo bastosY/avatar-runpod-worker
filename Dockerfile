@@ -5,6 +5,13 @@
 
 FROM runpod/worker-comfyui:5.2.0-base
 
+# ── atualiza o ComfyUI core ─────────────────────────────────────────────────
+# A base 5.2.0 traz um ComfyUI antigo demais p/ o WanVideoWrapper atual
+# (faltava comfy.ldm.flux.math.apply_rope1). Atualiza para o master recente.
+RUN git config --global --add safe.directory /comfyui && \
+    cd /comfyui && git fetch --depth 1 origin master && git reset --hard FETCH_HEAD && \
+    python -m pip install --no-cache-dir -r requirements.txt
+
 # ── custom nodes ────────────────────────────────────────────────────────────
 # WanVideoWrapper (nós WanVideoModelLoader/MultiTalkModelLoader/etc.) + VideoHelperSuite.
 # Usa o MESMO python do ComfyUI (python -m pip) para as deps caírem no env certo.
