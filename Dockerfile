@@ -39,6 +39,11 @@ RUN chmod +x /download_models.sh && MODELS_DIR=/comfyui/models /download_models.
 # ── camadas baratas no FINAL (mudam com frequência → rebuild em segundos) ────
 RUN python -m pip install --no-cache-dir boto3
 
+# ── SageAttention: acelera a atenção (attention_mode="sageattn" no WanVideoModelLoader) ─
+# v1 é triton puro (sem compilar kernels CUDA), instala via pip. gcc já está acima p/ o triton JIT.
+# No FINAL p/ não invalidar o cache dos 40GB de modelos.
+RUN python -m pip install --no-cache-dir sageattention
+
 # handler patchado: o handler do worker-comfyui 5.2.0 SÓ trata a key "images" e
 # ignora "gifs" (vídeo do VHS_VideoCombine) → retornava success_no_images. Este
 # patch sobe o mp4 pro R2/S3 (boto3 explícito, bucket vindo do BUCKET_ENDPOINT_URL).
