@@ -1,48 +1,36 @@
-# Worker serverless ComfyUI + WAN/InfiniteTalk (720p) — modelos ASSADOS na imagem.
-# Sem Network Volume: a imagem é autossuficiente, então o endpoint roda em QUALQUER
-# região com GPU (sem travar numa zona). RunPod builda esta imagem direto do GitHub.
+# Worker serverless ComfyUI — geração de IMAGEM (Qwen-Image-Edit 2511, 4-step).
+# Substitui o Nano Banana Pro: edição/consistência de personagem a partir de refs,
+# custo ~zero por imagem (só GPU). Modelos ASSADOS na imagem (sem volume).
+# branch: image — endpoint de IMAGEM separado do de vídeo.
 
 FROM runpod/worker-comfyui:5.2.0-base
 
-# ── compilador C p/ o triton ────────────────────────────────────────────────
-# GPUs novas (Blackwell/5090) precisam que o triton JIT-compile os kernels fp8;
-# sem gcc o ComfyUI crasha ("Failed to find C compiler"). Sageattention p/ acelerar.
+# ── compilador C p/ o triton (GPUs Blackwell JIT-compilam kernels fp8) ───────
 ENV CC=gcc
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 # ── atualiza o ComfyUI core ─────────────────────────────────────────────────
-# A base 5.2.0 traz um ComfyUI antigo demais p/ o WanVideoWrapper atual
-# (faltava comfy.ldm.flux.math.apply_rope1). Atualiza para o master recente.
+# Os nodes do Qwen-Image-Edit (TextEncodeQwenImageEditPlus etc.) são NATIVOS do
+# ComfyUI recente — a base 5.2.0 é antiga demais. Atualiza para o master.
 RUN git config --global --add safe.directory /comfyui && \
     cd /comfyui && git fetch --depth 1 origin master && git reset --hard FETCH_HEAD && \
     python -m pip install --no-cache-dir -r requirements.txt
 
-# ── custom nodes ────────────────────────────────────────────────────────────
-RUN cd /comfyui/custom_nodes && \
-    git clone --depth 1 https://github.com/kijai/ComfyUI-WanVideoWrapper.git && \
-    git clone --depth 1 https://github.com/kijai/ComfyUI-KJNodes.git && \
-    git clone --depth 1 https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git && \
-    python -m pip install --no-cache-dir -r ComfyUI-WanVideoWrapper/requirements.txt && \
-    python -m pip install --no-cache-dir -r ComfyUI-KJNodes/requirements.txt && \
-    python -m pip install --no-cache-dir -r ComfyUI-VideoHelperSuite/requirements.txt
-
-RUN python -m pip install --no-cache-dir "huggingface_hub[cli]" librosa soundfile
+# Qwen usa só nodes nativos → NÃO precisa do WanVideoWrapper (worker mais leve).
+RUN python -m pip install --no-cache-dir "huggingface_hub[cli]"
 
 # ── modelos ASSADOS na imagem (no build) ────────────────────────────────────
-# ~40GB baixados aqui → imagem autossuficiente, sem volume, sem download em runtime.
-# IMPORTANTE: esta camada (a cara) fica ANTES das camadas que mudam toda hora
-# (boto3 + handler), pra o cache dos 40GB ser reaproveitado em rebuilds.
+# ~25GB (diffusion 4-step merged + text encoder + vae). Camada cara ANTES das
+# baratas (boto3/handler) p/ o cache ser reaproveitado em rebuilds.
 COPY download_models.sh /download_models.sh
 RUN chmod +x /download_models.sh && MODELS_DIR=/comfyui/models /download_models.sh
 
-# ── camadas baratas no FINAL (mudam com frequência → rebuild em segundos) ────
+# ── camadas baratas no FINAL ────────────────────────────────────────────────
 RUN python -m pip install --no-cache-dir boto3
 
-# handler patchado: o handler do worker-comfyui 5.2.0 SÓ trata a key "images" e
-# ignora "gifs" (vídeo do VHS_VideoCombine) → retornava success_no_images. Este
-# patch sobe o mp4 pro R2/S3 (boto3 explícito, bucket vindo do BUCKET_ENDPOINT_URL).
+# handler patchado: sobe a saída (SaveImage → "images") pro R2/S3 quando as env
+# vars BUCKET_* estão setadas (mesmo handler do worker de vídeo).
 COPY handler.py /handler.py
 
-# Sem CMD override: o entrypoint padrão do worker-comfyui inicia ComfyUI + handler.
-# ComfyUI acha os modelos nativamente em /comfyui/models (sem extra_model_paths).
+# Sem CMD override: entrypoint padrão do worker-comfyui inicia ComfyUI + handler.

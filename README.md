@@ -1,28 +1,31 @@
-# RunPod Serverless worker — ComfyUI + WAN/InfiniteTalk (720p)
+# RunPod Serverless worker — branch `image` (Qwen-Image-Edit 2511)
 
-Worker custom pra rodar o workflow InfiniteTalk em **720p** no **RunPod Serverless**
-(sem pod). RunPod builda a imagem direto deste repo no GitHub.
+Worker de **geração de IMAGEM** pro RunPod Serverless. Substitui o Nano Banana Pro:
+edição/consistência de personagem a partir de imagens de referência, custo ~zero por
+imagem (só GPU). Endpoint **separado** do worker de vídeo.
 
-Modelo: `Wan2_1-I2V-14B-720p_fp8` + LoRA distill 480p (a 720p não existe; a 480p
-funciona no modelo 720p pois distila os steps, não a resolução).
+> Outras branches: `main`/`h100`/`rtx5090` = worker de **vídeo** (WAN/InfiniteTalk).
+
+## Modelo
+Qwen-Image-Edit 2511, fp8, com **Lightning 4-step** embutido (merged comfyui):
+- `diffusion_models/qwen_image_edit_2511_fp8_4steps.safetensors` (~20GB)
+- `text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors`
+- `vae/qwen_image_vae.safetensors`
+
+Nodes nativos do ComfyUI (UNETLoader, CLIPLoader, VAELoader, TextEncodeQwenImageEditPlus,
+KSampler, VAEDecode/Encode, SaveImage) — **sem custom nodes** → worker leve.
 
 ## Arquivos
-- `Dockerfile` — worker-comfyui + WanVideoWrapper + VideoHelperSuite.
-- `download_models.sh` — baixa os modelos (~50GB) pro Network Volume no 1º start.
-- `extra_model_paths.yaml` — aponta o ComfyUI pros modelos em `/runpod-volume/models`.
-- `start.sh` — roda o download (idempotente) e inicia o worker.
+- `Dockerfile` — worker-comfyui + ComfyUI master + modelos assados (sem volume).
+- `download_models.sh` — baixa os ~25GB no BUILD (imagem autossuficiente).
+- `handler.py` — sobe a saída (SaveImage → "images") pro R2 via boto3 (env BUCKET_*).
 
-## Passos no RunPod (UI, sem Docker local, sem pod)
-1. **Network Volume**: Storage → New Network Volume (ex.: 100GB) na **mesma região** do endpoint
-   (fixe o endpoint numa região só — volume é regional). Sugestão: **US-NC-1**.
-2. **Subir este repo pro GitHub** (pasta `runpod-worker/` como raiz do repo, ou ajustar o build context).
-3. **Serverless → New Endpoint → import from GitHub**: aponte pro repo. RunPod builda a imagem.
-4. No endpoint: **GPU 24GB (RTX 4090)**, **anexar o Network Volume**, região = a do volume.
-5. **1ª requisição** dispara o download dos modelos pro volume (lento, ~10-20min uma vez).
-   Mande um job de "aquecimento" e aguarde; os próximos cold starts já acham os modelos.
+## Instanciar no RunPod (sem volume)
+1. **Serverless → New Endpoint → import from GitHub** → este repo, branch **`image`**.
+2. GPU: **barata serve** (Qwen fp8 cabe em 24GB; image é leve). Min CUDA 12.8.
+3. **Env vars** (saída no R2): `BUCKET_ENDPOINT_URL`, `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY`.
+4. Build assa ~25GB (uma vez); rebuilds de handler são rápidos (cache dos modelos).
 
-## Notas
-- Os paths do HF em `download_models.sh` são o melhor palpite; se algum 404, ajustar
-  (conferir `huggingface.co/Kijai/WanVideo_comfy`).
-- O `wav2vec` (`chinese-wav2vec2-base`) é baixado pelo próprio nó em runtime.
-- Depois disso, apontar o app: `comfyui.ts` em modo RunPod (`/run` + `/status`).
+## App
+Apontar `IMAGE_BACKEND=runpod` + `RUNPOD_IMAGE_ENDPOINT_ID` no app; o workflow JSON
+do Qwen vai em `workflows/image/` do repo da plataforma.

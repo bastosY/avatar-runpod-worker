@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Baixa os modelos do InfiniteTalk. Roda NO BUILD (assa na imagem) — MODELS_DIR
-# aponta p/ /comfyui/models. Salva com os NOMES que o workflow espera.
+# Baixa os modelos do Qwen-Image-Edit 2511 (4-step). Roda NO BUILD (assa na imagem).
+# Salva com os NOMES que o workflow espera. ~25GB total.
 set -uo pipefail
 
 VOL="${MODELS_DIR:-/comfyui/models}"
-mkdir -p "$VOL"/{diffusion_models,text_encoders,vae,clip_vision,loras}
-echo "=== baixando modelos para $VOL ==="
+mkdir -p "$VOL"/{diffusion_models,text_encoders,vae,loras}
+echo "=== baixando modelos Qwen-Image-Edit para $VOL ==="
 echo "hf CLI: $(command -v hf || echo 'NAO ENCONTRADO')"
 
 dl() { # repo  path-no-repo  pasta-destino  nome-de-saida
@@ -22,12 +22,16 @@ dl() { # repo  path-no-repo  pasta-destino  nome-de-saida
   rm -rf "$tmp"
 }
 
-dl Kijai/WanVideo_comfy "Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors" diffusion_models "Wan2_1-I2V-14B-720P_fp8_e4m3fn.safetensors"
-dl Kijai/WanVideo_comfy "InfiniteTalk/Wan2_1-InfiniTetalk-Single_fp16.safetensors" diffusion_models "Wan2_1-InfiniTetalk-Single_fp16.safetensors"
-dl Kijai/WanVideo_comfy "umt5-xxl-enc-bf16.safetensors" text_encoders "umt5-xxl-enc-bf16.safetensors"
-dl Kijai/WanVideo_comfy "Wan2_1_VAE_bf16.safetensors" vae "wan_2.1_vae.safetensors"
-dl Kijai/WanVideo_comfy "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors" loras "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors"
-dl Comfy-Org/Wan_2.1_ComfyUI_repackaged "split_files/clip_vision/clip_vision_h.safetensors" clip_vision "clip_vision_h.safetensors"
+# Diffusion: versão MERGED comfyui com Lightning 4-step embutido (1 arquivo, ~20GB).
+dl lightx2v/Qwen-Image-Edit-2511-Lightning \
+   "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_comfyui_4steps_v1.0.safetensors" \
+   diffusion_models "qwen_image_edit_2511_fp8_4steps.safetensors"
+
+# Text encoder (Qwen2.5-VL 7B, fp8) e VAE — do repo base Comfy-Org.
+dl Comfy-Org/Qwen-Image_ComfyUI "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors" \
+   text_encoders "qwen_2.5_vl_7b_fp8_scaled.safetensors"
+dl Comfy-Org/Qwen-Image_ComfyUI "split_files/vae/qwen_image_vae.safetensors" \
+   vae "qwen_image_vae.safetensors"
 
 echo "=== conteúdo final ==="
 find "$VOL" -type f -exec du -h {} \; 2>/dev/null
