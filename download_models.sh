@@ -5,8 +5,9 @@
 set -uo pipefail
 
 VOL="${MODELS_DIR:-/comfyui/models}"
-mkdir -p "$VOL"/{diffusion_models,text_encoders,vae,loras}
-echo "=== baixando modelos Qwen-Image-Edit para $VOL ==="
+mkdir -p "$VOL"/{diffusion_models,text_encoders,vae,loras,controlnet,upscale_models,liveportrait,liveportrait_animals}
+mkdir -p "$VOL/ultralytics/bbox"
+echo "=== baixando modelos Qwen-Image-Edit (charsheet) para $VOL ==="
 
 # CLI do huggingface_hub: 'hf' (novo) ou 'huggingface-cli' (antigo).
 HF=""
@@ -46,6 +47,23 @@ dl fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA \
    "qwen-image-edit-2511-multiple-angles-lora.safetensors" \
    loras "qwen_camera_angles.safetensors"
 
+# ControlNet-Union (pose/canny/depth/openpose) p/ pose-grid + pose precisa.
+# ⚠️ é do Qwen-Image base; compat com Edit-2511 a VERIFICAR no spike.
+dl InstantX/Qwen-Image-ControlNet-Union \
+   "diffusion_pytorch_model.safetensors" \
+   controlnet "qwen_controlnet_union.safetensors"
+
+# Upscaler ESRGAN (UltimateSDUpscale) — não é difusão, model-agnostic.
+dl lokCX/4x-Ultrasharp "4x-UltraSharp.pth" upscale_models "4x-UltraSharp.pth"
+
+# Detector de rosto (FaceDetailer / UltralyticsDetectorProvider).
+dl Bingsu/adetailer "face_yolov8m.pt" ultralytics/bbox "face_yolov8m.pt"
+
+# LivePortrait (expressões via warp) — modelos convertidos pelo kijai (5 arquivos).
+for m in appearance_feature_extractor motion_extractor spade_generator stitching_retargeting_module warping_module; do
+  dl Kijai/LivePortrait_safetensors "${m}.safetensors" liveportrait "${m}.safetensors"
+done
+
 # ── verificação: o build DEVE falhar se faltar qualquer arquivo ──────────────
 echo "=== verificando arquivos baixados ==="
 EXPECTED=(
@@ -53,6 +71,12 @@ EXPECTED=(
   "text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"
   "vae/qwen_image_vae.safetensors"
   "loras/qwen_camera_angles.safetensors"
+  "controlnet/qwen_controlnet_union.safetensors"
+  "upscale_models/4x-UltraSharp.pth"
+  "ultralytics/bbox/face_yolov8m.pt"
+  "liveportrait/appearance_feature_extractor.safetensors"
+  "liveportrait/motion_extractor.safetensors"
+  "liveportrait/warping_module.safetensors"
 )
 MISSING=0
 for f in "${EXPECTED[@]}"; do

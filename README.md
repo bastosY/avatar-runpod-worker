@@ -1,31 +1,23 @@
-# RunPod Serverless worker — branch `image` (Qwen-Image-Edit 2511)
+# RunPod worker — branch `charsheet` (Qwen character sheet completo)
 
-Worker de **geração de IMAGEM** pro RunPod Serverless. Substitui o Nano Banana Pro:
-edição/consistência de personagem a partir de imagens de referência, custo ~zero por
-imagem (só GPU). Endpoint **separado** do worker de vídeo.
+Worker de IMAGEM mais rico (endpoint serverless SEPARADO do `image`). Método
+"Mickmumpitz-no-Qwen", tudo em Qwen-Image-Edit 2511 (sem Flux):
+- **Ângulos:** camera LoRA (fal multi-angle) — turnaround 360°.
+- **Pose precisa / pose-grid:** ControlNet-Union (pose/openpose) + template de esqueleto.
+- **Expressões:** LivePortrait (ExpressionEditor) — warp do rosto, identidade 100%.
+- **Qualidade:** FaceDetailer (Impact-Pack + yolov8) + UltimateSDUpscale (4x-UltraSharp).
 
-> Outras branches: `main`/`h100`/`rtx5090` = worker de **vídeo** (WAN/InfiniteTalk).
+## Modelos assados (~26GB)
+- diffusion_models/qwen_image_edit_2511_fp8_4steps.safetensors
+- text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors · vae/qwen_image_vae.safetensors
+- loras/qwen_camera_angles.safetensors  (fal multi-angle)
+- controlnet/qwen_controlnet_union.safetensors  (InstantX — ⚠️ compat c/ Edit-2511 a verificar)
+- upscale_models/4x-UltraSharp.pth · ultralytics/bbox/face_yolov8m.pt
+- liveportrait/*.safetensors  (Kijai, 5 arquivos)
 
-## Modelo
-Qwen-Image-Edit 2511, fp8, com **Lightning 4-step** embutido (merged comfyui):
-- `diffusion_models/qwen_image_edit_2511_fp8_4steps.safetensors` (~20GB)
-- `text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors`
-- `vae/qwen_image_vae.safetensors`
+## Custom nodes
+Impact-Pack, Impact-Subpack, UltimateSDUpscale, AdvancedLivePortrait (+ insightface).
 
-Nodes nativos do ComfyUI (UNETLoader, CLIPLoader, VAELoader, TextEncodeQwenImageEditPlus,
-KSampler, VAEDecode/Encode, SaveImage) — **sem custom nodes** → worker leve.
-
-## Arquivos
-- `Dockerfile` — worker-comfyui + ComfyUI master + modelos assados (sem volume).
-- `download_models.sh` — baixa os ~25GB no BUILD (imagem autossuficiente).
-- `handler.py` — sobe a saída (SaveImage → "images") pro R2 via boto3 (env BUCKET_*).
-
-## Instanciar no RunPod (sem volume)
-1. **Serverless → New Endpoint → import from GitHub** → este repo, branch **`image`**.
-2. GPU: **barata serve** (Qwen fp8 cabe em 24GB; image é leve). Min CUDA 12.8.
-3. **Env vars** (saída no R2): `BUCKET_ENDPOINT_URL`, `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY`.
-4. Build assa ~25GB (uma vez); rebuilds de handler são rápidos (cache dos modelos).
-
-## App
-Apontar `IMAGE_BACKEND=runpod` + `RUNPOD_IMAGE_ENDPOINT_ID` no app; o workflow JSON
-do Qwen vai em `workflows/image/` do repo da plataforma.
+## Deploy
+Serverless → New Endpoint → import GitHub → branch `charsheet`. GPU 24GB+, Min CUDA 12.8,
+env vars BUCKET_* (R2). ⚠️ Build pesado/longo; se falhar, ver ordem de depuração no Dockerfile.
