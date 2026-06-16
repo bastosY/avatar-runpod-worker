@@ -40,12 +40,19 @@ dl Comfy-Org/Qwen-Image_ComfyUI "split_files/text_encoders/qwen_2.5_vl_7b_fp8_sc
 dl Comfy-Org/Qwen-Image_ComfyUI "split_files/vae/qwen_image_vae.safetensors" \
    vae "qwen_image_vae.safetensors"
 
+# LoRA de CÂMERA (genérica, NÃO de personagem) — multi-angle p/ character sheet.
+# Formato de prompt: "<sks> [azimuth] [elevation] [distance]". 1 arquivo serve todos.
+dl fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA \
+   "qwen-image-edit-2511-multiple-angles-lora.safetensors" \
+   loras "qwen_camera_angles.safetensors"
+
 # ── verificação: o build DEVE falhar se faltar qualquer arquivo ──────────────
 echo "=== verificando arquivos baixados ==="
 EXPECTED=(
   "diffusion_models/qwen_image_edit_2511_fp8_4steps.safetensors"
   "text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"
   "vae/qwen_image_vae.safetensors"
+  "loras/qwen_camera_angles.safetensors"
 )
 MISSING=0
 for f in "${EXPECTED[@]}"; do
