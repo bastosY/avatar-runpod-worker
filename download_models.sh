@@ -29,16 +29,24 @@ dl() { # repo  path-no-repo  pasta-destino  nome-de-saida
   rm -rf "$tmp"
 }
 
-# Diffusion: versão MERGED comfyui com Lightning 4-step embutido (1 arquivo, ~20GB).
+# Diffusion: BASE puro (NÃO-merged, sem lightning embutido) — ~20GB.
+# Destrava cfg>1 (negative nativo) rodando steps cheios; OU empilhar a LoRA de
+# lightning abaixo p/ modo rápido. (branch image-base = plano B "modelo puro + LoRAs".)
 dl lightx2v/Qwen-Image-Edit-2511-Lightning \
-   "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_comfyui_4steps_v1.0.safetensors" \
-   diffusion_models "qwen_image_edit_2511_fp8_4steps.safetensors"
+   "qwen_image_edit_2511_fp8_e4m3fn_scaled.safetensors" \
+   diffusion_models "qwen_image_edit_2511_fp8_base.safetensors"
 
 # Text encoder (Qwen2.5-VL 7B, fp8) e VAE — do repo base Comfy-Org.
 dl Comfy-Org/Qwen-Image_ComfyUI "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors" \
    text_encoders "qwen_2.5_vl_7b_fp8_scaled.safetensors"
 dl Comfy-Org/Qwen-Image_ComfyUI "split_files/vae/qwen_image_vae.safetensors" \
    vae "qwen_image_vae.safetensors"
+
+# LoRA de LIGHTNING (aceleração, GENÉRICA) — separada, p/ empilhar com strength controlável.
+# strength 0 = base puro (cfg alto, ~25 steps); strength 1 + 4 steps = igual ao merged (cfg=1).
+dl lightx2v/Qwen-Image-Edit-2511-Lightning \
+   "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors" \
+   loras "qwen_lightning_4steps.safetensors"
 
 # LoRA de CÂMERA (genérica, NÃO de personagem) — multi-angle p/ character sheet.
 # Formato de prompt: "<sks> [azimuth] [elevation] [distance]". 1 arquivo serve todos.
@@ -49,9 +57,10 @@ dl fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA \
 # ── verificação: o build DEVE falhar se faltar qualquer arquivo ──────────────
 echo "=== verificando arquivos baixados ==="
 EXPECTED=(
-  "diffusion_models/qwen_image_edit_2511_fp8_4steps.safetensors"
+  "diffusion_models/qwen_image_edit_2511_fp8_base.safetensors"
   "text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"
   "vae/qwen_image_vae.safetensors"
+  "loras/qwen_lightning_4steps.safetensors"
   "loras/qwen_camera_angles.safetensors"
 )
 MISSING=0
