@@ -22,31 +22,18 @@ RUN python -m pip install --no-cache-dir "huggingface_hub[cli]"
 
 # ── custom nodes ─────────────────────────────────────────────────────────────
 # Impact-Pack (FaceDetailer) + Impact-Subpack (UltralyticsDetectorProvider),
-# UltimateSDUpscale, AdvancedLivePortrait (ExpressionEditor → expressões via warp),
-# controlnet_aux (MeshGraphormer-DepthMapPreprocessor → hand-refiner: depth+máscara da mão).
+# UltimateSDUpscale, AdvancedLivePortrait (ExpressionEditor → expressões via warp).
 RUN cd /comfyui/custom_nodes && \
     git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Impact-Pack.git && \
     git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git && \
     git clone --depth 1 https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git && \
     git clone --depth 1 https://github.com/PowerHouseMan/ComfyUI-AdvancedLivePortrait.git && \
-    git clone --depth 1 https://github.com/Fannovel16/comfyui_controlnet_aux.git && \
-    for d in ComfyUI-Impact-Pack ComfyUI-Impact-Subpack ComfyUI_UltimateSDUpscale ComfyUI-AdvancedLivePortrait comfyui_controlnet_aux; do \
+    for d in ComfyUI-Impact-Pack ComfyUI-Impact-Subpack ComfyUI_UltimateSDUpscale ComfyUI-AdvancedLivePortrait; do \
       [ -f "$d/requirements.txt" ] && python -m pip install --no-cache-dir -r "$d/requirements.txt" || true; \
     done
 
 # insightface + onnxruntime: LivePortrait precisa (detecção/landmark de rosto).
-# mediapipe + trimesh: MeshGraphormer (hand refiner) precisa.
-RUN python -m pip install --no-cache-dir insightface onnxruntime mediapipe trimesh
-
-# ── modelos do MeshGraphormer (hand refiner) — assados no ckpts do node ───────
-# Sem isso o node baixa em runtime (lento/instável no serverless). Repo hr16.
-RUN mkdir -p /comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned && \
-    hf download hr16/ControlNet-HandRefiner-pruned graphormer_hand_state_dict.bin \
-      --local-dir /comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned && \
-    hf download hr16/ControlNet-HandRefiner-pruned hrnetv2_w64_imagenet_pretrained.pth \
-      --local-dir /comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned && \
-    test -f /comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned/graphormer_hand_state_dict.bin && \
-    test -f /comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned/hrnetv2_w64_imagenet_pretrained.pth
+RUN python -m pip install --no-cache-dir insightface onnxruntime
 
 # ── modelos ASSADOS (no build) ───────────────────────────────────────────────
 # Qwen (25GB) + camera LoRA + ControlNet-Union + upscaler + yolov8 + LivePortrait.
@@ -57,5 +44,21 @@ RUN chmod +x /download_models.sh && MODELS_DIR=/comfyui/models /download_models.
 # ── camadas baratas no FINAL ────────────────────────────────────────────────
 RUN python -m pip install --no-cache-dir boto3
 COPY handler.py /handler.py
+
+# ── hand refiner (ideia 1) — DEPOIS dos modelos p/ NÃO invalidar o cache de 25GB ──
+# comfyui_controlnet_aux (MeshGraphormer-DepthMapPreprocessor) + deps + ckpts hr16
+# + hand_yolov8s (reforço pro hand-detailer). Camada barata, isolada no fim.
+RUN cd /comfyui/custom_nodes && \
+    git clone --depth 1 https://github.com/Fannovel16/comfyui_controlnet_aux.git && \
+    ([ -f comfyui_controlnet_aux/requirements.txt ] && python -m pip install --no-cache-dir -r comfyui_controlnet_aux/requirements.txt || true) && \
+    python -m pip install --no-cache-dir mediapipe trimesh && \
+    CK=/comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned && \
+    mkdir -p "$CK" && \
+    hf download hr16/ControlNet-HandRefiner-pruned graphormer_hand_state_dict.bin --local-dir "$CK" && \
+    hf download hr16/ControlNet-HandRefiner-pruned hrnetv2_w64_imagenet_pretrained.pth --local-dir "$CK" && \
+    hf download Bingsu/adetailer hand_yolov8s.pt --local-dir /comfyui/models/ultralytics/bbox && \
+    test -f "$CK/graphormer_hand_state_dict.bin" && \
+    test -f "$CK/hrnetv2_w64_imagenet_pretrained.pth" && \
+    test -f /comfyui/models/ultralytics/bbox/hand_yolov8s.pt
 
 # Sem CMD override: entrypoint padrão do worker-comfyui inicia ComfyUI + handler.
