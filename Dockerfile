@@ -22,18 +22,31 @@ RUN python -m pip install --no-cache-dir "huggingface_hub[cli]"
 
 # ── custom nodes ─────────────────────────────────────────────────────────────
 # Impact-Pack (FaceDetailer) + Impact-Subpack (UltralyticsDetectorProvider),
-# UltimateSDUpscale, AdvancedLivePortrait (ExpressionEditor → expressões via warp).
+# UltimateSDUpscale, AdvancedLivePortrait (ExpressionEditor → expressões via warp),
+# controlnet_aux (MeshGraphormer-DepthMapPreprocessor → hand-refiner: depth+máscara da mão).
 RUN cd /comfyui/custom_nodes && \
     git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Impact-Pack.git && \
     git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git && \
     git clone --depth 1 https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git && \
     git clone --depth 1 https://github.com/PowerHouseMan/ComfyUI-AdvancedLivePortrait.git && \
-    for d in ComfyUI-Impact-Pack ComfyUI-Impact-Subpack ComfyUI_UltimateSDUpscale ComfyUI-AdvancedLivePortrait; do \
+    git clone --depth 1 https://github.com/Fannovel16/comfyui_controlnet_aux.git && \
+    for d in ComfyUI-Impact-Pack ComfyUI-Impact-Subpack ComfyUI_UltimateSDUpscale ComfyUI-AdvancedLivePortrait comfyui_controlnet_aux; do \
       [ -f "$d/requirements.txt" ] && python -m pip install --no-cache-dir -r "$d/requirements.txt" || true; \
     done
 
 # insightface + onnxruntime: LivePortrait precisa (detecção/landmark de rosto).
-RUN python -m pip install --no-cache-dir insightface onnxruntime
+# mediapipe + trimesh: MeshGraphormer (hand refiner) precisa.
+RUN python -m pip install --no-cache-dir insightface onnxruntime mediapipe trimesh
+
+# ── modelos do MeshGraphormer (hand refiner) — assados no ckpts do node ───────
+# Sem isso o node baixa em runtime (lento/instável no serverless). Repo hr16.
+RUN mkdir -p /comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned && \
+    hf download hr16/ControlNet-HandRefiner-pruned graphormer_hand_state_dict.bin \
+      --local-dir /comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned && \
+    hf download hr16/ControlNet-HandRefiner-pruned hrnetv2_w64_imagenet_pretrained.pth \
+      --local-dir /comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned && \
+    test -f /comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned/graphormer_hand_state_dict.bin && \
+    test -f /comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned/hrnetv2_w64_imagenet_pretrained.pth
 
 # ── modelos ASSADOS (no build) ───────────────────────────────────────────────
 # Qwen (25GB) + camera LoRA + ControlNet-Union + upscaler + yolov8 + LivePortrait.

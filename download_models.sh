@@ -59,6 +59,9 @@ dl lokCX/4x-Ultrasharp "4x-UltraSharp.pth" upscale_models "4x-UltraSharp.pth"
 # Detector de rosto (FaceDetailer / UltralyticsDetectorProvider).
 dl Bingsu/adetailer "face_yolov8m.pt" ultralytics/bbox "face_yolov8m.pt"
 
+# Detector de MÃO (hand-detailer / reforço ao MeshGraphormer hand refiner).
+dl Bingsu/adetailer "hand_yolov8s.pt" ultralytics/bbox "hand_yolov8s.pt"
+
 # LivePortrait (expressões via warp) — modelos convertidos pelo kijai (5 arquivos).
 for m in appearance_feature_extractor motion_extractor spade_generator stitching_retargeting_module warping_module; do
   dl Kijai/LivePortrait_safetensors "${m}.safetensors" liveportrait "${m}.safetensors"
@@ -74,6 +77,7 @@ EXPECTED=(
   "controlnet/qwen_controlnet_union.safetensors"
   "upscale_models/4x-UltraSharp.pth"
   "ultralytics/bbox/face_yolov8m.pt"
+  "ultralytics/bbox/hand_yolov8s.pt"
   "liveportrait/appearance_feature_extractor.safetensors"
   "liveportrait/motion_extractor.safetensors"
   "liveportrait/warping_module.safetensors"
