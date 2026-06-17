@@ -45,6 +45,13 @@ RUN chmod +x /download_models.sh && MODELS_DIR=/comfyui/models /download_models.
 RUN python -m pip install --no-cache-dir boto3
 COPY handler.py /handler.py
 
+# ── LoRA de REALISMO (URP) — camada barata, ANTES do hand-refiner (hf ainda intacto) ──
+# Só aplicada quando o estilo for realista (env REALISM_LORA_NAME no backend). Trigger: "ultra-realistic portrait".
+RUN hf download prithivMLmods/Qwen-Image-Edit-2511-Ultra-Realistic-Portrait URP_15.safetensors --local-dir /tmp/urp && \
+    mv /tmp/urp/URP_15.safetensors /comfyui/models/loras/qwen_realism_portrait.safetensors && \
+    rm -rf /tmp/urp && \
+    test -f /comfyui/models/loras/qwen_realism_portrait.safetensors
+
 # ── hand refiner (ideia 1) — DEPOIS dos modelos p/ NÃO invalidar o cache de 25GB ──
 # comfyui_controlnet_aux (MeshGraphormer-DepthMapPreprocessor) + deps + ckpts hr16
 # + hand_yolov8s (reforço pro hand-detailer). Camada barata, isolada no fim.
