@@ -1,7 +1,7 @@
-# Worker serverless ComfyUI — geração de IMAGEM (Qwen-Image-Edit 2511, 4-step).
-# Substitui o Nano Banana Pro: edição/consistência de personagem a partir de refs,
-# custo ~zero por imagem (só GPU). Modelos ASSADOS na imagem (sem volume).
-# branch: image — endpoint de IMAGEM separado do de vídeo.
+# Worker serverless ComfyUI — CRIAÇÃO de personagem (Qwen-Image 2512, TEXT-TO-IMAGE).
+# Gera personagem realista do ZERO (sem foto). A imagem gerada vira REFERÊNCIA no
+# worker 2511 (edit) p/ ângulos/poses/charsheet. Modelos ASSADOS na imagem (sem volume).
+# branch: image-2512 — endpoint de CRIAÇÃO, separado do de edição (2511).
 
 FROM runpod/worker-comfyui:5.2.0-base
 
@@ -32,14 +32,5 @@ RUN python -m pip install --no-cache-dir boto3
 # handler patchado: sobe a saída (SaveImage → "images") pro R2/S3 quando as env
 # vars BUCKET_* estão setadas (mesmo handler do worker de vídeo).
 COPY handler.py /handler.py
-
-# ── LoRA de REALISMO (URP) — camada barata no fim (não invalida os 25GB) ──────
-# Anti-plástico. Aplicada só quando o estilo for realista (trigger "ultra-realistic portrait").
-# Usa `hf` OU `huggingface-cli` (o `hf` pode não existir dependendo da versão do huggingface_hub).
-RUN HF=$(command -v hf || command -v huggingface-cli) && echo "HF CLI: $HF" && \
-    "$HF" download prithivMLmods/Qwen-Image-Edit-2511-Ultra-Realistic-Portrait URP_15.safetensors --local-dir /tmp/urp && \
-    mv /tmp/urp/URP_15.safetensors /comfyui/models/loras/qwen_realism_portrait.safetensors && \
-    rm -rf /tmp/urp && \
-    test -f /comfyui/models/loras/qwen_realism_portrait.safetensors
 
 # Sem CMD override: entrypoint padrão do worker-comfyui inicia ComfyUI + handler.

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Baixa os modelos do Qwen-Image-Edit 2511 (4-step). Roda NO BUILD (assa na imagem).
-# Salva com os NOMES que o workflow espera. ~25GB total.
+# Baixa o Qwen-Image 2512 (TEXT-TO-IMAGE). Roda NO BUILD (assa na imagem). ~30GB.
+# Worker de CRIAÇÃO: gera personagem do zero (realista) → a imagem vira referência no 2511 (edit).
 # IMPORTANTE: FALHA o build se algum arquivo não baixar (não deixa imagem sem modelo).
 set -uo pipefail
 
 VOL="${MODELS_DIR:-/comfyui/models}"
 mkdir -p "$VOL"/{diffusion_models,text_encoders,vae,loras}
-echo "=== baixando modelos Qwen-Image-Edit para $VOL ==="
+echo "=== baixando Qwen-Image 2512 (t2i) para $VOL ==="
 
 # CLI do huggingface_hub: 'hf' (novo) ou 'huggingface-cli' (antigo).
 HF=""
@@ -29,30 +29,22 @@ dl() { # repo  path-no-repo  pasta-destino  nome-de-saida
   rm -rf "$tmp"
 }
 
-# Diffusion: versão MERGED comfyui com Lightning 4-step embutido (1 arquivo, ~20GB).
-dl lightx2v/Qwen-Image-Edit-2511-Lightning \
-   "qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_comfyui_4steps_v1.0.safetensors" \
-   diffusion_models "qwen_image_edit_2511_fp8_4steps.safetensors"
+# Diffusion: Qwen-Image 2512 fp8 (TEXT-TO-IMAGE, realismo nativo). ~20GB.
+dl Comfy-Org/Qwen-Image_ComfyUI "split_files/diffusion_models/qwen_image_2512_fp8_e4m3fn.safetensors" \
+   diffusion_models "qwen_image_2512_fp8.safetensors"
 
-# Text encoder (Qwen2.5-VL 7B, fp8) e VAE — do repo base Comfy-Org.
+# Text encoder (Qwen2.5-VL 7B, fp8) e VAE — mesmos do 2511.
 dl Comfy-Org/Qwen-Image_ComfyUI "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors" \
    text_encoders "qwen_2.5_vl_7b_fp8_scaled.safetensors"
 dl Comfy-Org/Qwen-Image_ComfyUI "split_files/vae/qwen_image_vae.safetensors" \
    vae "qwen_image_vae.safetensors"
 
-# LoRA de CÂMERA (genérica, NÃO de personagem) — multi-angle p/ character sheet.
-# Formato de prompt: "<sks> [azimuth] [elevation] [distance]". 1 arquivo serve todos.
-dl fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA \
-   "qwen-image-edit-2511-multiple-angles-lora.safetensors" \
-   loras "qwen_camera_angles.safetensors"
-
 # ── verificação: o build DEVE falhar se faltar qualquer arquivo ──────────────
 echo "=== verificando arquivos baixados ==="
 EXPECTED=(
-  "diffusion_models/qwen_image_edit_2511_fp8_4steps.safetensors"
+  "diffusion_models/qwen_image_2512_fp8.safetensors"
   "text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"
   "vae/qwen_image_vae.safetensors"
-  "loras/qwen_camera_angles.safetensors"
 )
 MISSING=0
 for f in "${EXPECTED[@]}"; do
