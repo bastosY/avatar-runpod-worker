@@ -47,7 +47,8 @@ COPY handler.py /handler.py
 
 # ── LoRA de REALISMO (URP) — camada barata, ANTES do hand-refiner (hf ainda intacto) ──
 # Só aplicada quando o estilo for realista (env REALISM_LORA_NAME no backend). Trigger: "ultra-realistic portrait".
-RUN hf download prithivMLmods/Qwen-Image-Edit-2511-Ultra-Realistic-Portrait URP_15.safetensors --local-dir /tmp/urp && \
+RUN HF=$(command -v hf || command -v huggingface-cli) && echo "HF CLI: $HF" && \
+    "$HF" download prithivMLmods/Qwen-Image-Edit-2511-Ultra-Realistic-Portrait URP_15.safetensors --local-dir /tmp/urp && \
     mv /tmp/urp/URP_15.safetensors /comfyui/models/loras/qwen_realism_portrait.safetensors && \
     rm -rf /tmp/urp && \
     test -f /comfyui/models/loras/qwen_realism_portrait.safetensors
@@ -59,11 +60,12 @@ RUN hf download prithivMLmods/Qwen-Image-Edit-2511-Ultra-Realistic-Portrait URP_
 # o huggingface_hub e o comando `hf` SOME (foi a causa do exit 127 no build anterior).
 RUN cd /comfyui/custom_nodes && \
     git clone --depth 1 https://github.com/Fannovel16/comfyui_controlnet_aux.git && \
+    HF=$(command -v hf || command -v huggingface-cli) && echo "HF CLI: $HF" && \
     CK=/comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned && \
     mkdir -p "$CK" && \
-    hf download hr16/ControlNet-HandRefiner-pruned graphormer_hand_state_dict.bin --local-dir "$CK" && \
-    hf download hr16/ControlNet-HandRefiner-pruned hrnetv2_w64_imagenet_pretrained.pth --local-dir "$CK" && \
-    hf download Bingsu/adetailer hand_yolov8s.pt --local-dir /comfyui/models/ultralytics/bbox && \
+    "$HF" download hr16/ControlNet-HandRefiner-pruned graphormer_hand_state_dict.bin --local-dir "$CK" && \
+    "$HF" download hr16/ControlNet-HandRefiner-pruned hrnetv2_w64_imagenet_pretrained.pth --local-dir "$CK" && \
+    "$HF" download Bingsu/adetailer hand_yolov8s.pt --local-dir /comfyui/models/ultralytics/bbox && \
     test -f "$CK/graphormer_hand_state_dict.bin" && \
     test -f "$CK/hrnetv2_w64_imagenet_pretrained.pth" && \
     test -f /comfyui/models/ultralytics/bbox/hand_yolov8s.pt && \
