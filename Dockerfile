@@ -48,10 +48,10 @@ COPY handler.py /handler.py
 # ── hand refiner (ideia 1) — DEPOIS dos modelos p/ NÃO invalidar o cache de 25GB ──
 # comfyui_controlnet_aux (MeshGraphormer-DepthMapPreprocessor) + deps + ckpts hr16
 # + hand_yolov8s (reforço pro hand-detailer). Camada barata, isolada no fim.
+# ⚠️ ORDEM IMPORTA: baixa com `hf` ANTES da requirements do controlnet_aux — ela rebaixa
+# o huggingface_hub e o comando `hf` SOME (foi a causa do exit 127 no build anterior).
 RUN cd /comfyui/custom_nodes && \
     git clone --depth 1 https://github.com/Fannovel16/comfyui_controlnet_aux.git && \
-    ([ -f comfyui_controlnet_aux/requirements.txt ] && python -m pip install --no-cache-dir -r comfyui_controlnet_aux/requirements.txt || true) && \
-    python -m pip install --no-cache-dir mediapipe trimesh && \
     CK=/comfyui/custom_nodes/comfyui_controlnet_aux/ckpts/hr16/ControlNet-HandRefiner-pruned && \
     mkdir -p "$CK" && \
     hf download hr16/ControlNet-HandRefiner-pruned graphormer_hand_state_dict.bin --local-dir "$CK" && \
@@ -59,6 +59,8 @@ RUN cd /comfyui/custom_nodes && \
     hf download Bingsu/adetailer hand_yolov8s.pt --local-dir /comfyui/models/ultralytics/bbox && \
     test -f "$CK/graphormer_hand_state_dict.bin" && \
     test -f "$CK/hrnetv2_w64_imagenet_pretrained.pth" && \
-    test -f /comfyui/models/ultralytics/bbox/hand_yolov8s.pt
+    test -f /comfyui/models/ultralytics/bbox/hand_yolov8s.pt && \
+    ([ -f comfyui_controlnet_aux/requirements.txt ] && python -m pip install --no-cache-dir -r comfyui_controlnet_aux/requirements.txt || true) && \
+    python -m pip install --no-cache-dir mediapipe trimesh
 
 # Sem CMD override: entrypoint padrão do worker-comfyui inicia ComfyUI + handler.
