@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Baixa o Qwen-Image 2512 (TEXT-TO-IMAGE). Roda NO BUILD (assa na imagem). ~30GB.
-# Worker de CRIAÇÃO: gera personagem do zero (realista) → a imagem vira referência no 2511 (edit).
+# Baixa o Z-Image Turbo (TEXT-TO-IMAGE) p/ o ComfyUI. Roda NO BUILD (assa na imagem) ~20GB.
+# Worker de geração com LoRA de PERSONAGEM: identidade nas weights da LoRA (baixada em runtime
+# do R2), cena/roupa no prompt. Apache 2.0 (Tongyi-MAI) → comercial liberado.
 # IMPORTANTE: FALHA o build se algum arquivo não baixar (não deixa imagem sem modelo).
 set -uo pipefail
 
 VOL="${MODELS_DIR:-/comfyui/models}"
 mkdir -p "$VOL"/{diffusion_models,text_encoders,vae,loras}
-echo "=== baixando Qwen-Image 2512 (t2i) para $VOL ==="
+echo "=== baixando Z-Image Turbo para $VOL ==="
 
 # CLI do huggingface_hub: 'hf' (novo) ou 'huggingface-cli' (antigo).
 HF=""
@@ -29,26 +30,26 @@ dl() { # repo  path-no-repo  pasta-destino  nome-de-saida
   rm -rf "$tmp"
 }
 
-# Diffusion: Qwen-Image 2512 fp8 (TEXT-TO-IMAGE, realismo nativo). ~20GB.
-dl Comfy-Org/Qwen-Image_ComfyUI "split_files/diffusion_models/qwen_image_2512_fp8_e4m3fn.safetensors" \
-   diffusion_models "qwen_image_2512_fp8.safetensors"
+# Diffusion: Z-Image Turbo bf16 (~12GB). Pra GPU pequena (≤8GB), trocar pelo fp8/nvfp4.
+dl Comfy-Org/z_image_turbo "split_files/diffusion_models/z_image_turbo_bf16.safetensors" \
+   diffusion_models "z_image_turbo_bf16.safetensors"
 
-# Text encoder (Qwen2.5-VL 7B, fp8) e VAE — mesmos do 2511.
-dl Comfy-Org/Qwen-Image_ComfyUI "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors" \
-   text_encoders "qwen_2.5_vl_7b_fp8_scaled.safetensors"
-dl Comfy-Org/Qwen-Image_ComfyUI "split_files/vae/qwen_image_vae.safetensors" \
-   vae "qwen_image_vae.safetensors"
+# Text encoder: Qwen3-4B (o Z-Image usa Qwen3 como text encoder). VAE: ae (FLUX VAE).
+dl Comfy-Org/z_image_turbo "split_files/text_encoders/qwen_3_4b.safetensors" \
+   text_encoders "qwen_3_4b.safetensors"
+dl Comfy-Org/z_image_turbo "split_files/vae/ae.safetensors" \
+   vae "ae.safetensors"
 
 # ── verificação: o build DEVE falhar se faltar qualquer arquivo ──────────────
 echo "=== verificando arquivos baixados ==="
 EXPECTED=(
-  "diffusion_models/qwen_image_2512_fp8.safetensors"
-  "text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"
-  "vae/qwen_image_vae.safetensors"
+  "diffusion_models/z_image_turbo_bf16.safetensors"
+  "text_encoders/qwen_3_4b.safetensors"
+  "vae/ae.safetensors"
 )
 MISSING=0
 for f in "${EXPECTED[@]}"; do
   if [ -f "$VOL/$f" ]; then echo "  ✓ $f ($(du -h "$VOL/$f" | cut -f1))"; else echo "  ✗ FALTANDO: $f"; MISSING=1; fi
 done
 if [ "$MISSING" -ne 0 ]; then echo "✗ FATAL: modelos faltando — abortando build"; exit 1; fi
-echo "✓ todos os modelos prontos em $VOL"
+echo "✓ modelos prontos em $VOL (loras/ vazia — LoRA de personagem vem do R2 em runtime)"

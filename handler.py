@@ -318,6 +318,74 @@ def get_available_models():
         return {}
 
 
+# ---------------------------------------------------------------------------
+# LoRA de personagem on-demand: baixa do R2 (ou de uma URL) p/ models/loras antes
+# de rodar o workflow, com cache em disco (warm worker reusa; cold baixa só se faltar).
+# Input: job["input"]["loras"] = [ {"name": "lipe.safetensors", "key": "loras/lipe.safetensors"}
+#                                  | {"name": "lipe.safetensors", "url": "https://..."} ]
+# ---------------------------------------------------------------------------
+LORA_DIR = "/comfyui/models/loras"
+
+
+def _r2_client():
+    """Cliente S3 (R2) a partir das mesmas BUCKET_* usadas no upload da saída. (cliente, bucket)."""
+    raw = os.environ.get("BUCKET_ENDPOINT_URL", "")
+    if not raw:
+        return None, None
+    try:
+        import boto3
+        from urllib.parse import urlparse
+
+        u = urlparse(raw)
+        endpoint = f"{u.scheme}://{u.netloc}"
+        bucket = u.path.lstrip("/").split("/")[0] or "nynce"
+        cli = boto3.client(
+            "s3",
+            region_name="auto",
+            endpoint_url=endpoint,
+            aws_access_key_id=os.environ.get("BUCKET_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.environ.get("BUCKET_SECRET_ACCESS_KEY"),
+        )
+        return cli, bucket
+    except Exception as e:
+        print(f"worker-comfyui - R2 client init failed: {e}")
+        return None, None
+
+
+def ensure_loras(loras):
+    """Garante que cada LoRA pedida esteja em models/loras (cache em disco)."""
+    if not loras:
+        return
+    os.makedirs(LORA_DIR, exist_ok=True)
+    cli, bucket = _r2_client()
+    for l in loras:
+        name = (l or {}).get("name")
+        if not name:
+            continue
+        dest = os.path.join(LORA_DIR, name)
+        if os.path.exists(dest):
+            print(f"worker-comfyui - lora cache HIT: {name}")
+            continue
+        url, key = l.get("url"), l.get("key")
+        tmp = dest + ".part"
+        try:
+            if url:
+                urllib.request.urlretrieve(url, tmp)
+            elif key and cli is not None:
+                cli.download_file(bucket, key, tmp)
+            else:
+                print(f"worker-comfyui - lora {name}: sem url/key ou R2 não configurado — pulando")
+                continue
+            os.replace(tmp, dest)  # atômico: só vira nome final se baixou inteiro
+            print(f"worker-comfyui - lora downloaded: {name}")
+        except Exception as e:
+            try:
+                os.path.exists(tmp) and os.remove(tmp)
+            except Exception:
+                pass
+            print(f"worker-comfyui - lora {name} download FAILED: {e}")
+
+
 def queue_workflow(workflow, client_id):
     """
     Queue a workflow to be processed by ComfyUI
@@ -496,6 +564,10 @@ def handler(job):
     # Extract validated data
     workflow = validated_data["workflow"]
     input_images = validated_data.get("images")
+
+    # Baixa as LoRAs de personagem pedidas (R2/URL → models/loras, cache em disco) ANTES de
+    # rodar o workflow. O workflow referencia a LoRA pelo nome via "Z-Image Turbo LoRA Loader".
+    ensure_loras(job_input.get("loras"))
 
     # Make sure that the ComfyUI HTTP API is available before proceeding
     if not check_server(

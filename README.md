@@ -1,31 +1,63 @@
-# RunPod Serverless worker — branch `image` (Qwen-Image-Edit 2511)
+# RunPod Serverless worker — branch `zimage` (Z-Image Turbo + LoRA de personagem)
 
-Worker de **geração de IMAGEM** pro RunPod Serverless. Substitui o Nano Banana Pro:
-edição/consistência de personagem a partir de imagens de referência, custo ~zero por
-imagem (só GPU). Endpoint **separado** do worker de vídeo.
+Worker de **geração de IMAGEM** com **LoRA de personagem**: a identidade do personagem
+mora nas weights de uma LoRA (treinada a partir do charsheet), e o worker a **baixa em
+runtime do R2** — sem rebuild por personagem. Cena/roupa/pose vão no prompt. Custo ~zero por
+imagem (só GPU). Endpoint **separado** dos demais.
 
-> Outras branches: `main`/`h100`/`rtx5090` = worker de **vídeo** (WAN/InfiniteTalk).
+> Por que Z-Image: 6B, **Apache 2.0** (comercial liberado), inferência baratíssima
+> (~$0.0085/MP), LoRA-friendly. Alternativa ao reference-edit do Qwen p/ escalar a dezenas
+> de personagens com consistência travada na LoRA.
 
-## Modelo
-Qwen-Image-Edit 2511, fp8, com **Lightning 4-step** embutido (merged comfyui):
-- `diffusion_models/qwen_image_edit_2511_fp8_4steps.safetensors` (~20GB)
-- `text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors`
-- `vae/qwen_image_vae.safetensors`
+## Modelos (assados na imagem, ~20GB)
+- `diffusion_models/z_image_turbo_bf16.safetensors` (~12GB) — Z-Image Turbo (arch Lumina2)
+- `text_encoders/qwen_3_4b.safetensors` — text encoder Qwen3-4B
+- `vae/ae.safetensors` — VAE
+- `loras/` — **VAZIA**; a LoRA de personagem vem do R2 em runtime
 
-Nodes nativos do ComfyUI (UNETLoader, CLIPLoader, VAELoader, TextEncodeQwenImageEditPlus,
-KSampler, VAEDecode/Encode, SaveImage) — **sem custom nodes** → worker leve.
+Fonte: `Comfy-Org/z_image_turbo` (HF). GPU pequena (≤8GB): trocar o bf16 pelo fp8/nvfp4 no
+`download_models.sh`.
+
+## Custom node (OBRIGATÓRIO)
+[`Comfyui-ZiT-Lora-loader`](https://github.com/capitan01R/Comfyui-ZiT-Lora-loader) — nó
+**"Z-Image Turbo LoRA Loader"**. O `LoraLoader` genérico do ComfyUI **dropa silenciosamente
+a atenção** no Z-Image (QKV fundido) → a LoRA carrega mas a identidade NÃO transfere. Este nó
+funde Q/K/V no formato nativo (`auto_convert_qkv`). **Sem ele a LoRA é inútil.**
 
 ## Arquivos
-- `Dockerfile` — worker-comfyui + ComfyUI master + modelos assados (sem volume).
-- `download_models.sh` — baixa os ~25GB no BUILD (imagem autossuficiente).
-- `handler.py` — sobe a saída (SaveImage → "images") pro R2 via boto3 (env BUCKET_*).
+- `Dockerfile` — worker-comfyui + ComfyUI master + ZiT loader + modelos assados (sem volume).
+- `download_models.sh` — baixa os ~20GB no BUILD (imagem autossuficiente).
+- `handler.py` — (1) `ensure_loras`: baixa a LoRA do R2/URL p/ `models/loras` (cache em disco)
+  antes de rodar; (2) sobe a saída (SaveImage → "images") pro R2 via boto3.
+
+## Contrato de input (RunPod `/run`)
+```jsonc
+{
+  "input": {
+    "workflow": { /* grafo ComfyUI: ...Z-Image Turbo LoRA Loader... */ },
+    "loras": [
+      { "name": "lipe.safetensors", "key": "loras/lipe.safetensors" }   // baixa do R2 (boto3)
+      // ou: { "name": "lipe.safetensors", "url": "https://..." }        // baixa de URL
+    ]
+  }
+}
+```
+- `name` = nome do arquivo que o workflow referencia no nó ZiT (`lora_name`).
+- `key` = caminho no bucket R2 (usa as mesmas `BUCKET_*` do upload). `url` = alternativa direta.
+- Cache: se `models/loras/<name>` já existe (warm worker), pula o download.
 
 ## Instanciar no RunPod (sem volume)
-1. **Serverless → New Endpoint → import from GitHub** → este repo, branch **`image`**.
-2. GPU: **barata serve** (Qwen fp8 cabe em 24GB; image é leve). Min CUDA 12.8.
-3. **Env vars** (saída no R2): `BUCKET_ENDPOINT_URL`, `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY`.
-4. Build assa ~25GB (uma vez); rebuilds de handler são rápidos (cache dos modelos).
+1. **Serverless → New Endpoint → import from GitHub** → este repo, branch **`zimage`**.
+2. GPU: 24GB folga (bf16 12GB + encoder). Z-Image é leve/rápido (8 steps). Min CUDA 12.8.
+3. **Env vars** (R2, p/ saída E p/ baixar LoRA por `key`): `BUCKET_ENDPOINT_URL`,
+   `BUCKET_ACCESS_KEY_ID`, `BUCKET_SECRET_ACCESS_KEY`.
+4. Build assa ~20GB (uma vez); rebuilds de handler são rápidos (cache dos modelos).
 
-## App
-Apontar `IMAGE_BACKEND=runpod` + `RUNPOD_IMAGE_ENDPOINT_ID` no app; o workflow JSON
-do Qwen vai em `workflows/image/` do repo da plataforma.
+## App (próximas fases)
+- Treino da LoRA (fal `z-image-trainer` OU `comfyUI-Realtime-Lora` no próprio worker) →
+  `.safetensors` salvo no R2 em `loras/<slug>.safetensors`.
+- `RUNPOD_ZIMAGE_ENDPOINT_ID` no app; `buildZImage()` (TS) monta o workflow t2i com o nó
+  **Z-Image Turbo LoRA Loader** + `loras:[{name,key}]` no payload.
+
+> ⚠️ A montar/validar com o ComfyUI rodando: o `class_type` exato do nó ZiT e os nós de
+> sampler do Z-Image (steps≈8, cfg baixo) — confirmar via `/object_info` do endpoint.
