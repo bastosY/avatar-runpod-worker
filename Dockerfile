@@ -1,48 +1,32 @@
-# Worker serverless ComfyUI + WAN/InfiniteTalk (720p) — modelos ASSADOS na imagem.
-# Sem Network Volume: a imagem é autossuficiente, então o endpoint roda em QUALQUER
-# região com GPU (sem travar numa zona). RunPod builda esta imagem direto do GitHub.
+# Worker serverless de TREINO — LoRA de personagem Z-Image (Ostris ai-toolkit).
+# Recebe dataset (charsheet) + config → treina → sobe loras/<slug>.safetensors no R2.
+# 1 POST = 1 personagem treinado. Roda em 4090 (24GB). branch: zimage-trainer
+#
+# Separado do worker de INFERÊNCIA (branch zimage): treino é job longo (~10-30min) e tem
+# deps diferentes (ai-toolkit, não ComfyUI). Ambos cospem o mesmo .safetensors no R2.
 
-FROM runpod/worker-comfyui:5.2.0-base
+FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel
 
-# ── compilador C p/ o triton ────────────────────────────────────────────────
-# GPUs novas (Blackwell/5090) precisam que o triton JIT-compile os kernels fp8;
-# sem gcc o ComfyUI crasha ("Failed to find C compiler"). Sageattention p/ acelerar.
-ENV CC=gcc
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential && \
+ENV DEBIAN_FRONTEND=noninteractive \
+    HF_HUB_ENABLE_HF_TRANSFER=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git build-essential ffmpeg libgl1 libglib2.0-0 && \
     rm -rf /var/lib/apt/lists/*
 
-# ── atualiza o ComfyUI core ─────────────────────────────────────────────────
-# A base 5.2.0 traz um ComfyUI antigo demais p/ o WanVideoWrapper atual
-# (faltava comfy.ldm.flux.math.apply_rope1). Atualiza para o master recente.
-RUN git config --global --add safe.directory /comfyui && \
-    cd /comfyui && git fetch --depth 1 origin master && git reset --hard FETCH_HEAD && \
-    python -m pip install --no-cache-dir -r requirements.txt
+# ── Ostris ai-toolkit (treinador de LoRA; suporta Z-Image Turbo) ─────────────
+RUN git clone --depth 1 https://github.com/ostris/ai-toolkit /ai-toolkit && \
+    cd /ai-toolkit && git submodule update --init --recursive && \
+    pip install -r requirements.txt
 
-# ── custom nodes ────────────────────────────────────────────────────────────
-RUN cd /comfyui/custom_nodes && \
-    git clone --depth 1 https://github.com/kijai/ComfyUI-WanVideoWrapper.git && \
-    git clone --depth 1 https://github.com/kijai/ComfyUI-KJNodes.git && \
-    git clone --depth 1 https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git && \
-    python -m pip install --no-cache-dir -r ComfyUI-WanVideoWrapper/requirements.txt && \
-    python -m pip install --no-cache-dir -r ComfyUI-KJNodes/requirements.txt && \
-    python -m pip install --no-cache-dir -r ComfyUI-VideoHelperSuite/requirements.txt
+# deps do worker (runpod handler + R2 + render do yaml + hf)
+RUN pip install runpod boto3 pyyaml "huggingface_hub[cli]" hf_transfer
 
-RUN python -m pip install --no-cache-dir "huggingface_hub[cli]" librosa soundfile
-
-# ── modelos ASSADOS na imagem (no build) ────────────────────────────────────
-# ~40GB baixados aqui → imagem autossuficiente, sem volume, sem download em runtime.
-# IMPORTANTE: esta camada (a cara) fica ANTES das camadas que mudam toda hora
-# (boto3 + handler), pra o cache dos 40GB ser reaproveitado em rebuilds.
+# ── prefetch base + adapter no HF cache (camada cara ANTES do handler) ───────
 COPY download_models.sh /download_models.sh
-RUN chmod +x /download_models.sh && MODELS_DIR=/comfyui/models /download_models.sh
+RUN chmod +x /download_models.sh && /download_models.sh
 
-# ── camadas baratas no FINAL (mudam com frequência → rebuild em segundos) ────
-RUN python -m pip install --no-cache-dir boto3
-
-# handler patchado: o handler do worker-comfyui 5.2.0 SÓ trata a key "images" e
-# ignora "gifs" (vídeo do VHS_VideoCombine) → retornava success_no_images. Este
-# patch sobe o mp4 pro R2/S3 (boto3 explícito, bucket vindo do BUCKET_ENDPOINT_URL).
+# handler de treino (serverless): dataset → config.yaml → ai-toolkit → R2
 COPY handler.py /handler.py
-
-# Sem CMD override: o entrypoint padrão do worker-comfyui inicia ComfyUI + handler.
-# ComfyUI acha os modelos nativamente em /comfyui/models (sem extra_model_paths).
+CMD ["python", "-u", "/handler.py"]
