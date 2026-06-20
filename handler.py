@@ -27,6 +27,7 @@ import glob
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 
 import yaml
@@ -97,12 +98,14 @@ def _build_config(slug, dataset_dir, output_dir, cfg):
     if isinstance(resolution, int):
         resolution = [resolution]
 
+    ckpt_every = int(cfg.get("checkpoint_every", 500))  # salva checkpoint a cada N steps
+    keep = int(cfg.get("keep_checkpoints", 100))        # mantém (quase) todos no disco
     process = {
         "type": "sd_trainer",
         "training_folder": output_dir,
         "device": "cuda:0",
         "network": {"type": "lora", "linear": rank, "linear_alpha": rank},
-        "save": {"dtype": "float16", "save_every": steps, "max_step_saves_to_keep": 1},
+        "save": {"dtype": "float16", "save_every": ckpt_every, "max_step_saves_to_keep": keep},
         "datasets": [
             {
                 "folder_path": dataset_dir,
@@ -152,6 +155,30 @@ def _build_config(slug, dataset_dir, output_dir, cfg):
     return path
 
 
+def _stable(path, min_age=8):
+    """True se o arquivo não foi tocado nos últimos min_age s (provavelmente já escrito inteiro)."""
+    try:
+        return (time.time() - os.path.getmtime(path)) > min_age
+    except OSError:
+        return False
+
+
+def _sweep_checkpoints(output_dir, cli, bucket, slug, uploaded, require_stable=True):
+    """Sobe checkpoints .safetensors novos (e estáveis) pro R2 em loras/<slug>/<arquivo>."""
+    for p in sorted(glob.glob(os.path.join(output_dir, "**", "*.safetensors"), recursive=True)):
+        if p in uploaded:
+            continue
+        if require_stable and not _stable(p):
+            continue
+        key = f"loras/{slug}/{os.path.basename(p)}"
+        try:
+            cli.upload_file(p, bucket, key)
+            uploaded[p] = key
+            print(f"trainer - checkpoint → r2:{key}")
+        except Exception as e:
+            print(f"trainer - checkpoint upload failed {os.path.basename(p)}: {e}")
+
+
 def handler(job):
     inp = job.get("input") or {}
     slug = inp.get("slug")
@@ -168,42 +195,69 @@ def handler(job):
     if n == 0:
         return {"error": "no training images (precisa de 'data' base64 ou 'key' do R2)"}
 
-    yaml_path = _build_config(slug, dataset_dir, output_dir, cfg)
-    print(f"trainer - slug={slug} imgs={n} steps={cfg.get('steps', 3000)} → ai-toolkit")
+    cli, bucket = _r2_client()
+    if cli is None:
+        return {"error": "R2 não configurado (defina BUCKET_* no endpoint)"}
 
+    yaml_path = _build_config(slug, dataset_dir, output_dir, cfg)
+    print(f"trainer - slug={slug} imgs={n} steps={cfg.get('steps', 3000)} ckpt={cfg.get('checkpoint_every', 500)} → ai-toolkit")
+
+    # uploader em background: sobe cada checkpoint pro R2 ENQUANTO treina → sobrevive a timeout
+    # (se o job morrer no meio, os checkpoints já estão no R2) e dá visibilidade de progresso.
     t0 = time.time()
+    uploaded = {}
+    stop = threading.Event()
+
+    def _watch():
+        while not stop.is_set():
+            _sweep_checkpoints(output_dir, cli, bucket, slug, uploaded)
+            stop.wait(20)
+
+    watcher = threading.Thread(target=_watch, daemon=True)
+    watcher.start()
+
     proc = subprocess.run(
         ["python", os.path.join(AI_TOOLKIT, "run.py"), yaml_path],
         cwd=AI_TOOLKIT,
         capture_output=True,
         text=True,
     )
+
+    stop.set()
+    watcher.join(timeout=10)
+    # varredura final: subprocess acabou → todos os arquivos estão escritos (sem checar estabilidade)
+    _sweep_checkpoints(output_dir, cli, bucket, slug, uploaded, require_stable=False)
+
     if proc.returncode != 0:
         return {
             "error": "ai-toolkit training failed",
             "returncode": proc.returncode,
+            "checkpoints": sorted(uploaded.values()),
             "stdout": proc.stdout[-3000:],
             "stderr": proc.stderr[-3000:],
         }
-
-    saf = sorted(glob.glob(os.path.join(output_dir, "**", "*.safetensors"), recursive=True))
-    if not saf:
+    if not uploaded:
         return {"error": "no .safetensors produced", "stdout": proc.stdout[-2000:]}
-    lora = saf[-1]
 
-    cli, bucket = _r2_client()
-    if cli is None:
-        return {"error": "R2 não configurado (defina BUCKET_* no endpoint)"}
-    key = inp.get("output_key") or f"loras/{slug}.safetensors"
-    cli.upload_file(lora, bucket, key)
+    # checkpoint final (maior step) também vira a key canônica loras/<slug>.safetensors
+    final_path = sorted(uploaded.keys())[-1]
+    canonical = inp.get("output_key") or f"loras/{slug}.safetensors"
+    cli.upload_file(final_path, bucket, canonical)
 
     dt = round(time.time() - t0)
-    print(f"trainer - done slug={slug} {dt}s → r2:{key}")
+    print(f"trainer - done slug={slug} {dt}s → {len(uploaded)} checkpoints, final r2:{canonical}")
     try:
         shutil.rmtree(work)
     except Exception:
         pass
-    return {"ok": True, "key": key, "seconds": dt, "images": n, "steps": int(cfg.get("steps", 3000))}
+    return {
+        "ok": True,
+        "key": canonical,
+        "checkpoints": sorted(uploaded.values()),
+        "seconds": dt,
+        "images": n,
+        "steps": int(cfg.get("steps", 3000)),
+    }
 
 
 runpod.serverless.start({"handler": handler})
