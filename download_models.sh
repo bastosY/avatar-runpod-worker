@@ -11,7 +11,7 @@ if [ -z "$HF" ]; then echo "✗ FATAL: nenhum CLI do huggingface (hf/huggingface
 echo "=== prefetch Z-Image base + training adapter ($HF) ==="
 
 BASE="${ZIMAGE_BASE_MODEL:-Tongyi-MAI/Z-Image-Turbo}"
-ADAPTER="${ZIMAGE_TRAIN_ADAPTER:-ostris/zimage_turbo_training_adapterV2}"
+ADAPTER="${ZIMAGE_TRAIN_ADAPTER:-ostris/zimage_turbo_training_adapter}"
 
 # base (OBRIGATÓRIO — falha o build se não baixar; senão a imagem fica inútil)
 echo "↓ base: $BASE"

@@ -33,7 +33,8 @@ import yaml
 import runpod
 
 BASE_MODEL = os.environ.get("ZIMAGE_BASE_MODEL", "Tongyi-MAI/Z-Image-Turbo")
-TRAIN_ADAPTER = os.environ.get("ZIMAGE_TRAIN_ADAPTER", "ostris/zimage_turbo_training_adapterV2")
+# adapter de de-distillation (evita "turbo drift"). ID correto = sem "V2".
+TRAIN_ADAPTER = os.environ.get("ZIMAGE_TRAIN_ADAPTER", "ostris/zimage_turbo_training_adapter")
 AI_TOOLKIT = os.environ.get("AI_TOOLKIT_DIR", "/ai-toolkit")
 
 
@@ -123,14 +124,17 @@ def _build_config(slug, dataset_dir, output_dir, cfg):
             "dtype": "bf16",
         },
         "model": {
-            # CONFIRMAR no 1º build (ai-toolkit z-image example): 'arch' e o campo do adapter.
+            # VALIDADO no spike: arch="zimage" e assistant_lora_path são os campos certos do ai-toolkit.
             "name_or_path": BASE_MODEL,
             "arch": "zimage",
             "quantize": True,
-            # de-distillation adapter — carregado SÓ no treino (evita "turbo drift").
-            "assistant_lora_path": TRAIN_ADAPTER,
         },
     }
+    # de-distillation adapter — carregado SÓ no treino (evita "turbo drift"). Override por input
+    # (config.training_adapter); string vazia/null = treinar SEM adapter (não recomendado).
+    adapter = cfg.get("training_adapter", TRAIN_ADAPTER)
+    if adapter:
+        process["model"]["assistant_lora_path"] = adapter
     trigger = cfg.get("trigger")
     if trigger:
         process["trigger_word"] = trigger
