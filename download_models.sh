@@ -11,15 +11,24 @@ if [ -z "$HF" ]; then echo "✗ FATAL: nenhum CLI do huggingface (hf/huggingface
 echo "=== prefetch Z-Image base + training adapter ($HF) ==="
 
 BASE="${ZIMAGE_BASE_MODEL:-Tongyi-MAI/Z-Image-Turbo}"
-ADAPTER="${ZIMAGE_TRAIN_ADAPTER:-ostris/zimage_turbo_training_adapter}"
+# o "adapter" é um ARQUIVO dentro do repo (v1/v2). O ai-toolkit quer o CAMINHO do arquivo,
+# não o repo id → assamos o v2 em /adapters e apontamos o caminho local no handler.
+ADAPTER_REPO="${ZIMAGE_TRAIN_ADAPTER_REPO:-ostris/zimage_turbo_training_adapter}"
+ADAPTER_FILE="${ZIMAGE_TRAIN_ADAPTER_FILE:-zimage_turbo_training_adapter_v2.safetensors}"
 
 # base (OBRIGATÓRIO — falha o build se não baixar; senão a imagem fica inútil)
 echo "↓ base: $BASE"
 $HF download "$BASE" || { echo "✗ FATAL: base model $BASE"; exit 1; }
 
-# adapter de de-distillation (best-effort: o ai-toolkit busca em runtime se faltar).
-# Evita "turbo drift": carregado SÓ no treino; a LoRA final roda no modelo distilado normal.
-echo "↓ adapter: $ADAPTER"
-$HF download "$ADAPTER" || echo "⚠ adapter não prefetchado (ai-toolkit busca em runtime)"
+# adapter de de-distillation (OBRIGATÓRIO agora — o arquivo específico, assado em /adapters).
+mkdir -p /adapters
+echo "↓ adapter: $ADAPTER_REPO :: $ADAPTER_FILE"
+tmp=$(mktemp -d)
+if $HF download "$ADAPTER_REPO" "$ADAPTER_FILE" --local-dir "$tmp" && [ -f "$tmp/$ADAPTER_FILE" ]; then
+  mv "$tmp/$ADAPTER_FILE" "/adapters/$ADAPTER_FILE" && echo "  ✓ adapter assado: /adapters/$ADAPTER_FILE"
+else
+  echo "✗ FATAL: adapter $ADAPTER_REPO :: $ADAPTER_FILE"; rm -rf "$tmp"; exit 1
+fi
+rm -rf "$tmp"
 
 echo "✓ prefetch ok"

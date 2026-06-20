@@ -33,8 +33,9 @@ import yaml
 import runpod
 
 BASE_MODEL = os.environ.get("ZIMAGE_BASE_MODEL", "Tongyi-MAI/Z-Image-Turbo")
-# adapter de de-distillation (evita "turbo drift"). ID correto = sem "V2".
-TRAIN_ADAPTER = os.environ.get("ZIMAGE_TRAIN_ADAPTER", "ostris/zimage_turbo_training_adapter")
+# adapter de de-distillation (evita "turbo drift"). O ai-toolkit quer o CAMINHO DO ARQUIVO
+# (.safetensors), não o repo id — o arquivo é assado em /adapters (download_models.sh).
+TRAIN_ADAPTER = os.environ.get("ZIMAGE_TRAIN_ADAPTER", "/adapters/zimage_turbo_training_adapter_v2.safetensors")
 AI_TOOLKIT = os.environ.get("AI_TOOLKIT_DIR", "/ai-toolkit")
 
 
