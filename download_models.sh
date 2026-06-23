@@ -22,18 +22,25 @@ dl() { # repo  path-no-repo  pasta-destino  nome-de-saida
   echo "↓ $out  ($repo :: $path)"
   local tmp; tmp=$(mktemp -d)
   if $HF download "$repo" "$path" --local-dir "$tmp" && [ -f "$tmp/$path" ]; then
-    mv "$tmp/$path" "$final" && echo "  ✓ OK: $out"
+    mv "$tmp/$path" "$final"
+    # integridade: download truncado/HTML-de-erro passa no -f mas é minúsculo → falha o build.
+    local sz; sz=$(stat -c%s "$final" 2>/dev/null || echo 0)
+    if [ "$sz" -lt 1000000 ]; then echo "  ✗ TRUNCADO: $out (${sz}B)"; rm -f "$final"; rm -rf "$tmp"; return 1; fi
+    echo "  ✓ OK: $out ($((sz/1024/1024))MB)"
   else
     echo "  ✗ FALHOU: $out  ($repo :: $path)"; rm -rf "$tmp"; return 1
   fi
   rm -rf "$tmp"
 }
 
-# Diffusion: BASE puro (NÃO-merged, sem lightning embutido) — ~20GB.
+# Diffusion: BASE puro (NÃO-merged, sem lightning) — fp8 da COMFY-ORG (20.5GB).
 # Destrava cfg>1 (negative nativo) rodando steps cheios; OU empilhar a LoRA de
 # lightning abaixo p/ modo rápido. (branch image-base = plano B "modelo puro + LoRAs".)
-dl lightx2v/Qwen-Image-Edit-2511-Lightning \
-   "qwen_image_edit_2511_fp8_e4m3fn_scaled.safetensors" \
+# ⚠️ NÃO usar o "..._scaled.safetensors" da lightx2v: é formato diffusers/raw (sem "comfyui"
+# no nome) → carrega mas NÃO denoisa (saída = RUÍDO). Só o merged "_comfyui_" da lightx2v presta.
+# A Comfy-Org empacota o fp8 nativo p/ ComfyUI (UNETLoader carrega direto).
+dl Comfy-Org/Qwen-Image-Edit_ComfyUI \
+   "split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors" \
    diffusion_models "qwen_image_edit_2511_fp8_base.safetensors"
 
 # Text encoder (Qwen2.5-VL 7B, fp8) e VAE — do repo base Comfy-Org.
