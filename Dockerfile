@@ -26,6 +26,15 @@ RUN python -m pip install --no-cache-dir "huggingface_hub[cli]"
 COPY download_models.sh /download_models.sh
 RUN chmod +x /download_models.sh && MODELS_DIR=/comfyui/models /download_models.sh
 
+# ── perf: tirar o offload de pesos pra CPU ──────────────────────────────────
+# Log do worker mostrou "Set vram state to: NORMAL_VRAM" + "async weight offloading" + text
+# encoder "current: cpu" — mesmo com 80GB livres no H100, estava fazendo streaming CPU↔GPU.
+# A base hard-coda os args do ComfyUI (sem env/arquivo) → injeta --highvram direto no launch.
+# Mantém modelo+encoders residentes na GPU. Falha o build se o start.sh mudar de padrão.
+RUN test -f /start.sh && sed -i 's/--disable-metadata/--disable-metadata --highvram/' /start.sh && \
+    grep -q -- '--highvram' /start.sh && echo "✓ --highvram injetado no start.sh" || \
+    { echo "✗ start.sh não encontrado ou padrão mudou — revisar"; exit 1; }
+
 # ── camadas baratas no FINAL ────────────────────────────────────────────────
 RUN python -m pip install --no-cache-dir boto3
 
